@@ -7,10 +7,35 @@ const path = require('path');
 const app = express();
 app.use(express.json()); // parse JSON bodies
 
-// Helper: sanitize incoming URL (basic check)
+// Security: allowed domains (whitelist)
+const ALLOWED_DOMAINS = process.env.ALLOWED_DOMAINS?.split(',') || [];
+
+// Helper: validate incoming URL (scheme, length, optional whitelist)
 function isValidUrl(str) {
   try {
-    new URL(str);
+    const url = new URL(str);
+    
+    // Only allow http and https
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      console.warn(`Invalid protocol: ${url.protocol}`);
+      return false;
+    }
+    
+    // Limit URL length to prevent DoS
+    if (str.length > 2048) {
+      console.warn('URL exceeds maximum length (2048 chars)');
+      return false;
+    }
+    
+    // If whitelist is configured, check against it
+    if (ALLOWED_DOMAINS.length > 0) {
+      const allowed = ALLOWED_DOMAINS.some(domain => url.hostname.endsWith(domain));
+      if (!allowed) {
+        console.warn(`Domain not whitelisted: ${url.hostname}`);
+        return false;
+      }
+    }
+    
     return true;
   } catch (_) {
     return false;
@@ -46,8 +71,8 @@ app.post('/run', async (req, res) => {
 
   console.log(`Running: ${cmd}`);
 
-  // Execute the command; we wait for it to finish
-   exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+  // Execute the command with timeout to prevent resource exhaustion
+  exec(cmd, { maxBuffer: 1024 * 1024 * 10, timeout: 120000 }, (error, stdout, stderr) => {
     if (error) {
       console.error('Browsertime error:', error);
       return res.status(500).json({ error: 'Browsertime failed', details: stderr });
@@ -94,15 +119,39 @@ app.post('/run', async (req, res) => {
       return res.status(500).json({ error: 'Result file not found', domainDir, latestFolder });
     }
 
-    // Read and send the JSON back
-    const json = fs.readFileSync(resultFile, 'utf8');
+    // Read the full browsertime result
+    const fullJson = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
+    
+    // Extract only the required fields
+    const result = {
+      powerConsumption: fullJson[0]?.powerConsumption?.[0],
+      statistics: {
+        powerConsumption: {
+          median: fullJson[0]?.statistics?.powerConsumption?.median,
+          mean: fullJson[0]?.statistics?.powerConsumption?.mean
+        }
+      },
+      cpu: fullJson[0]?.cpu ? `${fullJson[0].cpu} µWh` : null,
+      googleWebVitals: {
+        firstContentfulPaint: fullJson[0]?.googleWebVitals?.[0]?.firstContentfulPaint
+      },
+      browserScripts: {
+        browser: fullJson[0]?.browserScripts?.[0]?.browser
+      },
+      info: {
+        browser: fullJson[0]?.info?.browser
+      }
+    };
+    
     res.setHeader('Content-Type', 'application/json');
-    res.send(json);
+    res.json(result);
   });
 });
 
 // Simple health check
 app.get('/', (_, res) => res.send('Browsertime service is alive'));
 
+// Restrict access to localhost only (127.0.0.1) for security
+const HOST = process.env.HOST || '127.0.0.1';
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Service listening on http://localhost:${PORT}`));
+app.listen(PORT, HOST, () => console.log(`🚀 Service listening on http://${HOST}:${PORT}`));
