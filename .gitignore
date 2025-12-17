@@ -13,6 +13,7 @@ node_modules
 logs
 *.log
 browsertime-results/**
+data_formatted/**
 
 # Misc
 .DS_Store

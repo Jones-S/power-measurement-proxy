@@ -71,11 +71,21 @@ app.post('/run', async (req, res) => {
 
   console.log(`Running: ${cmd}`);
 
+  // Track execution time
+  const startTime = Date.now();
+
   // Execute the command with timeout to prevent resource exhaustion
   exec(cmd, { maxBuffer: 1024 * 1024 * 10, timeout: 120000 }, (error, stdout, stderr) => {
+    const executionTime = Date.now() - startTime;
+    console.log(`Browsertime execution time: ${executionTime}ms (${(executionTime / 1000).toFixed(2)}s)`);
+
     if (error) {
       console.error('Browsertime error:', error);
-      return res.status(500).json({ error: 'Browsertime failed', details: stderr });
+      return res.status(500).json({ 
+        error: 'Browsertime failed', 
+        details: stderr,
+        executionTime: `${executionTime}ms`
+      });
     }
 
     // Extract domain and path from URL and build folder name
@@ -124,6 +134,7 @@ app.post('/run', async (req, res) => {
     
     // Extract only the required fields
     const result = {
+      executionTime: `${executionTime}ms`,
       powerConsumption: fullJson[0]?.powerConsumption?.[0],
       statistics: {
         powerConsumption: {
@@ -131,7 +142,7 @@ app.post('/run', async (req, res) => {
           mean: fullJson[0]?.statistics?.powerConsumption?.mean
         }
       },
-      cpu: fullJson[0]?.cpu ? `${fullJson[0].cpu} µWh` : null,
+      cpuTime: fullJson[0]?.cpu ? `${fullJson[0].cpu} ms` : null,
       googleWebVitals: {
         firstContentfulPaint: fullJson[0]?.googleWebVitals?.[0]?.firstContentfulPaint
       },
