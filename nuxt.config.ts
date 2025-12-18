@@ -25,10 +25,7 @@ export default defineNuxtConfig({
   app: {
     pageTransition: { name: 'page', mode: 'out-in' },
     head: {
-      link: [
-        { rel: 'icon', type: 'image/png', href: '/favicon.png' },
-        { rel: 'stylesheet', href: 'https://use.typekit.net/kkn0crl.css' },
-      ],
+      link: [{ rel: 'icon', type: 'image/png', href: '/favicon.png' }],
     },
   },
   build: {},
