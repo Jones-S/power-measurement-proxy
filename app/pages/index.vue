@@ -57,6 +57,7 @@
 const url = ref('')
 const errorMessage = ref('')
 const isLoading = ref(false)
+const config = useRuntimeConfig()
 
 const validateUrl = (urlString) => {
   try {
@@ -84,7 +85,8 @@ const handleSubmit = async () => {
   isLoading.value = true
 
   try {
-    const response = await fetch('http://localhost:3000/run', {
+    const port = config.public.browsertimePort
+    const response = await fetch(`http://localhost:${port}/run`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

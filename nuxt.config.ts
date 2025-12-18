@@ -16,6 +16,11 @@ export default defineNuxtConfig({
   future: {
     compatibilityVersion: 4,
   },
+  runtimeConfig: {
+    public: {
+      browsertimePort: process.env.NUXT_PUBLIC_BROWSERTIME_PORT || '3001',
+    },
+  },
   devtools: { enabled: true },
   app: {
     pageTransition: { name: 'page', mode: 'out-in' },
