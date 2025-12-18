@@ -8,7 +8,7 @@ module.exports = {
         500: '#c3c3c3',
         900: '#1a202c',
       },
-      highlight: '#ff2e4d'
+      highlight: '#ff2e4d',
     },
     screens: {
       sm: '640px',
