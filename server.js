@@ -4,6 +4,9 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import cors from 'cors'
+import PQueue from 'p-queue'
+import crypto from 'crypto'
+import 'dotenv/config'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -18,13 +21,64 @@ app.use(
   }),
 )
 
-app.use(express.json()) // parse JSON bodies
+app.use(express.json())
 
-// Security: allowed domains (whitelist)
-const ALLOWED_DOMAINS = process.env.ALLOWED_DOMAINS?.split(',') || []
+// Security: allowed origins/referrers (whitelist)
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',')
+console.log('Configured allowed origins: ', ALLOWED_ORIGINS)
 
-// Helper: validate incoming URL (scheme, length, optional whitelist)
-function isValidUrl(str) {
+// Queue with concurrency of 1 (only one browsertime test at a time)
+const queue = new PQueue({ concurrency: 1 })
+
+// Map to store job status and results
+const jobs = new Map() // jobId -> { status, result, position, url, error }
+
+// Middleware to check if request origin is allowed
+const checkOrigin = (req, res, next) => {
+  if (!ALLOWED_ORIGINS || ALLOWED_ORIGINS.length === 0) {
+    console.warn(`Allowed origins not configured, not allowing any requests`)
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Origin not allowed',
+    })
+  }
+
+  const origin = req.headers.origin || req.headers.referer
+
+  if (!origin) {
+    console.warn('Request has no origin or referer header')
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Request must include origin or referer header',
+    })
+  }
+
+  try {
+    const requestOrigin = new URL(origin)
+    const isAllowed = ALLOWED_ORIGINS.some((domain) =>
+      requestOrigin.hostname.endsWith(domain.trim()),
+    )
+
+    if (!isAllowed) {
+      console.warn(`Origin not whitelisted: ${requestOrigin.hostname}`)
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Origin not allowed',
+      })
+    }
+
+    next()
+  } catch (error) {
+    console.error(error)
+    console.warn('Invalid origin/referer:', origin)
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Invalid origin or referer',
+    })
+  }
+}
+
+const isValidUrl = (str) => {
   try {
     const url = new URL(str)
 
@@ -40,154 +94,239 @@ function isValidUrl(str) {
       return false
     }
 
-    // If whitelist is configured, check against it
-    if (ALLOWED_DOMAINS.length > 0) {
-      const allowed = ALLOWED_DOMAINS.some((domain) =>
-        url.hostname.endsWith(domain),
-      )
-      if (!allowed) {
-        console.warn(`Domain not whitelisted: ${url.hostname}`)
-        return false
-      }
-    }
-
     return true
-  } catch (_) {
+  } catch (error) {
+    console.warn('URL validation error:', error)
     return false
   }
 }
 
-// POST /run   body: { "url": "https://example.com" }
-app.post('/run', async (req, res) => {
+const runBrowsertimeTest = (targetUrl) => {
+  return new Promise((resolve, reject) => {
+    // Build a unique output folder – timestamp + random part
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const outDir = path.join(__dirname, 'browsertime-results', `${timestamp}`)
+
+    // Ensure the folder exists
+    fs.mkdirSync(outDir, { recursive: true })
+
+    // Construct the command
+    const cmd = [
+      'npx',
+      'browsertime',
+      '--config',
+      path.resolve('power.json'),
+      // '--firefox.binaryPath',
+      // '"/Applications/Firefox.app/Contents/MacOS/firefox"',
+      '--outputFolder',
+      `"${outDir}"`,
+      `"${targetUrl}"`,
+      '-n 1',
+    ].join(' ')
+
+    console.log(`Running: ${cmd}`)
+
+    const startTime = Date.now()
+
+    exec(
+      cmd,
+      { maxBuffer: 1024 * 1024 * 10, timeout: 120000 },
+      (error, stdout, stderr) => {
+        const executionTime = Date.now() - startTime
+        console.log(
+          `Browsertime execution time: ${executionTime}ms (${(executionTime / 1000).toFixed(2)}s)`,
+        )
+
+        if (error) {
+          console.error('Browsertime error:', error)
+          reject({
+            error: 'Browsertime failed',
+            details: stderr,
+            executionTime: `${executionTime}ms`,
+          })
+          return
+        }
+
+        // Extract domain and path from URL
+        const urlObj = new URL(targetUrl)
+        let folderName = urlObj.hostname
+
+        if (urlObj.pathname && urlObj.pathname !== '/') {
+          const pathPart = urlObj.pathname
+            .replace(/^\/+|\/+$/g, '')
+            .replace(/\//g, '-')
+          folderName = folderName + '-' + pathPart
+        }
+
+        const domainDir = path.join(
+          __dirname,
+          'browsertime-results',
+          folderName,
+        )
+
+        // Find the latest timestamp folder
+        let latestFolder = null
+        let latestTime = 0
+
+        try {
+          if (fs.existsSync(domainDir)) {
+            const folders = fs.readdirSync(domainDir)
+            for (const folder of folders) {
+              const folderPath = path.join(domainDir, folder)
+              const stat = fs.statSync(folderPath)
+              if (stat.isDirectory() && stat.mtimeMs > latestTime) {
+                latestTime = stat.mtimeMs
+                latestFolder = folderPath
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Error reading domain directory:', err)
+        }
+
+        const resultFile = latestFolder
+          ? path.join(latestFolder, 'browsertime.json')
+          : null
+
+        if (!resultFile || !fs.existsSync(resultFile)) {
+          reject({
+            error: 'Result file not found',
+            domainDir,
+            latestFolder,
+          })
+          return
+        }
+
+        const fullJson = JSON.parse(fs.readFileSync(resultFile, 'utf8'))
+
+        const result = {
+          executionTime: `${executionTime}ms`,
+          powerConsumption: fullJson[0]?.powerConsumption?.[0],
+          statistics: {
+            powerConsumption: {
+              median: fullJson[0]?.statistics?.powerConsumption?.median,
+              mean: fullJson[0]?.statistics?.powerConsumption?.mean,
+            },
+          },
+          cpuTime: fullJson[0]?.cpu ? `${fullJson[0].cpu} ms` : null,
+          googleWebVitals: {
+            firstContentfulPaint:
+              fullJson[0]?.googleWebVitals?.[0]?.firstContentfulPaint,
+          },
+          browserScripts: {
+            browser: fullJson[0]?.browserScripts?.[0]?.browser,
+          },
+          info: {
+            browser: fullJson[0]?.info?.browser,
+          },
+        }
+
+        resolve(result)
+      },
+    )
+  })
+}
+
+app.post('/measure', checkOrigin, async (req, res) => {
   const targetUrl = req.body.url
 
   if (!targetUrl || !isValidUrl(targetUrl)) {
     return res.status(400).json({ error: 'Invalid or missing URL' })
   }
 
-  // Build a unique output folder – timestamp + random part
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const outDir = path.join(__dirname, 'browsertime-results', `${timestamp}`)
+  // Generate unique job ID
+  const jobId = crypto.randomUUID()
 
-  // Ensure the folder exists
-  fs.mkdirSync(outDir, { recursive: true })
+  // Calculate current position in queue
+  const position = queue.size + queue.pending
 
-  // Construct the command (same as you run manually)
-  const cmd = [
-    'npx',
-    'browsertime',
-    '--config',
-    path.resolve('power.json'), // adjust if stored elsewhere
-    '--firefox.binaryPath',
-    '"/Applications/Firefox.app/Contents/MacOS/firefox"',
-    '--outputFolder',
-    `"${outDir}"`,
-    `"${targetUrl}"`,
-    '-n 1', // single iteration
-  ].join(' ')
+  // Store job with initial status
+  jobs.set(jobId, {
+    status: 'queued',
+    position,
+    url: targetUrl,
+    createdAt: new Date().toISOString(),
+  })
 
-  console.log(`Running: ${cmd}`)
+  console.log(`Job ${jobId} queued for ${targetUrl} at position ${position}`)
 
-  // Track execution time
-  const startTime = Date.now()
+  // Add job to queue
+  queue.add(async () => {
+    console.log(`Job ${jobId} starting...`)
 
-  // Execute the command with timeout to prevent resource exhaustion
-  exec(
-    cmd,
-    { maxBuffer: 1024 * 1024 * 10, timeout: 120000 },
-    (error, stdout, stderr) => {
-      const executionTime = Date.now() - startTime
-      console.log(
-        `Browsertime execution time: ${executionTime}ms (${(executionTime / 1000).toFixed(2)}s)`,
-      )
+    // Update status to running
+    const job = jobs.get(jobId)
+    job.status = 'running'
+    job.startedAt = new Date().toISOString()
 
-      if (error) {
-        console.error('Browsertime error:', error)
-        return res.status(500).json({
-          error: 'Browsertime failed',
-          details: stderr,
-          executionTime: `${executionTime}ms`,
-        })
-      }
+    try {
+      const result = await runBrowsertimeTest(targetUrl)
 
-      // Extract domain and path from URL and build folder name
-      // e.g., https://wearelucid.ch/projects -> wearelucid.ch-projects
-      const urlObj = new URL(targetUrl)
-      let folderName = urlObj.hostname
+      // Update job with results
+      job.status = 'complete'
+      job.result = result
+      job.completedAt = new Date().toISOString()
 
-      if (urlObj.pathname && urlObj.pathname !== '/') {
-        // Convert pathname to folder format: /projects -> -projects, /projekte/sateco -> -projekte-sateco
-        const pathPart = urlObj.pathname
-          .replace(/^\/+|\/+$/g, '')
-          .replace(/\//g, '-')
-        folderName = folderName + '-' + pathPart
-      }
+      console.log(`Job ${jobId} completed successfully`)
+    } catch (error) {
+      // Update job with error
+      job.status = 'failed'
+      job.error = error
+      job.completedAt = new Date().toISOString()
 
-      const domainDir = path.join(__dirname, 'browsertime-results', folderName)
+      console.error(`Job ${jobId} failed:`, error)
+    }
+  })
 
-      // Find the latest timestamp folder
-      let latestFolder = null
-      let latestTime = 0
-
-      try {
-        if (fs.existsSync(domainDir)) {
-          const folders = fs.readdirSync(domainDir)
-          for (const folder of folders) {
-            const folderPath = path.join(domainDir, folder)
-            const stat = fs.statSync(folderPath)
-            if (stat.isDirectory() && stat.mtimeMs > latestTime) {
-              latestTime = stat.mtimeMs
-              latestFolder = folderPath
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Error reading domain directory:', err)
-      }
-
-      // Build path to browsertime.json
-      const resultFile = latestFolder
-        ? path.join(latestFolder, 'browsertime.json')
-        : null
-
-      // If the file is not there, something went wrong
-      if (!resultFile || !fs.existsSync(resultFile)) {
-        return res
-          .status(500)
-          .json({ error: 'Result file not found', domainDir, latestFolder })
-      }
-
-      // Read the full browsertime result
-      const fullJson = JSON.parse(fs.readFileSync(resultFile, 'utf8'))
-
-      // Extract only the required fields
-      const result = {
-        executionTime: `${executionTime}ms`,
-        powerConsumption: fullJson[0]?.powerConsumption?.[0],
-        statistics: {
-          powerConsumption: {
-            median: fullJson[0]?.statistics?.powerConsumption?.median,
-            mean: fullJson[0]?.statistics?.powerConsumption?.mean,
-          },
-        },
-        cpuTime: fullJson[0]?.cpu ? `${fullJson[0].cpu} ms` : null,
-        googleWebVitals: {
-          firstContentfulPaint:
-            fullJson[0]?.googleWebVitals?.[0]?.firstContentfulPaint,
-        },
-        browserScripts: {
-          browser: fullJson[0]?.browserScripts?.[0]?.browser,
-        },
-        info: {
-          browser: fullJson[0]?.info?.browser,
-        },
-      }
-
-      res.setHeader('Content-Type', 'application/json')
-      res.json(result)
-    },
-  )
+  // Return job ID and position immediately
+  res.json({
+    jobId,
+    position,
+    status: 'queued',
+    message: 'Test queued successfully',
+  })
 })
+
+app.get('/status/:jobId', checkOrigin, (req, res) => {
+  const { jobId } = req.params
+
+  const job = jobs.get(jobId)
+
+  if (!job) {
+    return res.status(404).json({
+      error: 'Job not found',
+      message: 'This job ID does not exist or has expired',
+    })
+  }
+
+  res.json({
+    jobId,
+    status: job.status,
+    url: job.url,
+    position: job.status === 'queued' ? job.position : undefined,
+    result: job.status === 'complete' ? job.result : undefined,
+    error: job.status === 'failed' ? job.error : undefined,
+    createdAt: job.createdAt,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+  })
+})
+
+// Optional: Clean up old jobs periodically (keep only last 5 hours)
+setInterval(
+  () => {
+    const timeThreshold = Date.now() - 5 * 60 * 60 * 1000 // 5h
+
+    for (const [jobId, job] of jobs.entries()) {
+      const createdAt = new Date(job.createdAt).getTime()
+      if (createdAt < timeThreshold) {
+        jobs.delete(jobId)
+        console.log(`Cleaned up old job: ${jobId}`)
+      }
+    }
+  },
+  60 * 60 * 1000, // Run every hour
+)
 
 // Simple health check
 app.get('/', (_, res) => res.send('Browsertime service is alive'))
