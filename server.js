@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 import PQueue from 'p-queue'
 import crypto from 'crypto'
 import 'dotenv/config'
+import { request } from 'http'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -185,6 +186,9 @@ const runBrowsertimeTest = (targetUrl) => {
         const fullJson = JSON.parse(fs.readFileSync(resultFile, 'utf8'))
 
         const result = {
+          requestedUrl: targetUrl,
+          pageTitle:
+            fullJson[0]?.pageInfo?.documentTitle || 'Title not available',
           executionTime: `${executionTime}ms`,
           powerConsumption: fullJson[0]?.powerConsumption?.[0],
           statistics: {
