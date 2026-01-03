@@ -190,9 +190,13 @@ const runBrowsertimeTest = (targetUrl) => {
           pageTitle:
             fullJson[0]?.pageInfo?.documentTitle || 'Title not available',
           executionTime: `${executionTime}ms`,
-          powerConsumption: fullJson[0]?.powerConsumption?.[0],
+          powerConsumption: {
+            value: fullJson[0]?.powerConsumption?.[0],
+            unit: 'Wh',
+          },
           statistics: {
             powerConsumption: {
+              unit: `Wh`,
               median: fullJson[0]?.statistics?.powerConsumption?.median,
               mean: fullJson[0]?.statistics?.powerConsumption?.mean,
             },

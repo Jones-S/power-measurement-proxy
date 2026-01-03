@@ -1,7 +1,8 @@
 <template>
   <header class="sticky top-6 left-0 z-10 mb-12 flex w-full items-center p-6">
     <AppLogo />
-    <div class="z-50 flex w-full justify-center md:hidden">
+
+    <!-- <div class="z-50 flex w-full justify-center md:hidden">
       <AppBurger
         :nav-is-open="mobileNavIsOpen"
         @burger-clicked="handleBurgerClick"
@@ -14,43 +15,43 @@
       >
         mobile nav
       </div>
-    </Transition>
+    </Transition> -->
   </header>
 </template>
 
 <script setup>
-import { disablePageScroll, enablePageScroll } from '@fluejs/noscroll'
+// import { disablePageScroll, enablePageScroll } from '@fluejs/noscroll'
 
-const mobileNavIsOpen = ref(false)
+// const mobileNavIsOpen = ref(false)
 
-const handleBurgerClick = () => {
-  mobileNavIsOpen.value = !mobileNavIsOpen.value
+// const handleBurgerClick = () => {
+//   mobileNavIsOpen.value = !mobileNavIsOpen.value
 
-  if (mobileNavIsOpen.value) {
-    disablePageScroll()
-  } else {
-    enablePageScroll()
-  }
-}
+//   if (mobileNavIsOpen.value) {
+//     disablePageScroll()
+//   } else {
+//     enablePageScroll()
+//   }
+// }
 
-const closeNav = () => {
-  mobileNavIsOpen.value = false
-  enablePageScroll()
-}
+// const closeNav = () => {
+//   mobileNavIsOpen.value = false
+//   enablePageScroll()
+// }
 
-const onEscapeKeyUp = (event) => {
-  if (event.which === 27) {
-    closeNav()
-  }
-}
+// const onEscapeKeyUp = (event) => {
+//   if (event.which === 27) {
+//     closeNav()
+//   }
+// }
 
-onMounted(() => {
-  window.addEventListener('keyup', onEscapeKeyUp)
-})
+// onMounted(() => {
+//   window.addEventListener('keyup', onEscapeKeyUp)
+// })
 
-onUnmounted(() => {
-  window.removeEventListener('keyup', onEscapeKeyUp)
-})
+// onUnmounted(() => {
+//   window.removeEventListener('keyup', onEscapeKeyUp)
+// })
 </script>
 
 <style scoped>
