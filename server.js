@@ -3,7 +3,6 @@ import { exec } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import cors from 'cors'
 import PQueue from 'p-queue'
 import crypto from 'crypto'
 import 'dotenv/config'
@@ -18,18 +17,43 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',')
 console.log('📋 Configured allowed origins: ', ALLOWED_ORIGINS)
 
 // Enable CORS
-app.use(
-  cors({
-    origin: [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      ...(process.env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim()) || []), // Add from env
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
-  }),
-)
+app.use((req, res, next) => {
+  const origin = req.headers.origin
+
+  // Parse allowed origins from env variable
+  const allowedDomains =
+    process.env.ALLOWED_ORIGINS?.split(',').map((d) => d.trim()) || []
+
+  // Build full list of allowed origins
+  const allowedOrigins = allowedDomains.flatMap((domain) => {
+    if (domain === 'localhost') {
+      return ['http://localhost:3000', 'http://127.0.0.1:3000']
+    }
+    // For other domains, only support https
+    return `https://${domain}`
+  })
+
+  console.log('Request origin:', origin)
+  console.log('Allowed origins:', allowedOrigins)
+
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin)
+    res.header('Access-Control-Allow-Credentials', 'true')
+  }
+
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, Origin, Accept',
+  )
+
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204)
+  }
+
+  next()
+})
 
 app.use(express.json())
 
