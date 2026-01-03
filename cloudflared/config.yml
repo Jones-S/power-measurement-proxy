@@ -1,0 +1,7 @@
+tunnel: power-proxy
+credentials-file: /Users/jones/.cloudflared/5cc004c4-d3a9-4618-a6e6-ce2c93b7c8f5.json
+
+ingress:
+  - hostname: power-proxy.784516.xyz
+    service: http://localhost:3001
+  - service: http_status:404
