@@ -34,4 +34,4 @@ Could be that the drivers need to be installed (which are more laxly handled wit
 
 ## Install proxy on a new machine
 
-[docs/setup.md](setup.md)
+[setup.md](./docs/setup.md)

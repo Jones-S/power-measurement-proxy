@@ -13,70 +13,31 @@ const __dirname = path.dirname(__filename)
 
 const app = express()
 
-// Enable CORS for localhost development
+// Security: allowed origins/referrers (whitelist)
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',')
+console.log('📋 Configured allowed origins: ', ALLOWED_ORIGINS)
+
+// Enable CORS
 app.use(
   cors({
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      ...(process.env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim()) || []), // Add from env
+    ],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
   }),
 )
 
 app.use(express.json())
-
-// Security: allowed origins/referrers (whitelist)
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',')
-console.log('Configured allowed origins: ', ALLOWED_ORIGINS)
 
 // Queue with concurrency of 1 (only one browsertime test at a time)
 const queue = new PQueue({ concurrency: 1 })
 
 // Map to store job status and results
 const jobs = new Map() // jobId -> { status, result, position, url, error }
-
-// Middleware to check if request origin is allowed
-const checkOrigin = (req, res, next) => {
-  if (!ALLOWED_ORIGINS || ALLOWED_ORIGINS.length === 0) {
-    console.warn(`Allowed origins not configured, not allowing any requests`)
-    return res.status(403).json({
-      error: 'Forbidden',
-      message: 'Origin not allowed',
-    })
-  }
-
-  const origin = req.headers.origin || req.headers.referer
-
-  if (!origin) {
-    console.warn('Request has no origin or referer header')
-    return res.status(403).json({
-      error: 'Forbidden',
-      message: 'Request must include origin or referer header',
-    })
-  }
-
-  try {
-    const requestOrigin = new URL(origin)
-    const isAllowed = ALLOWED_ORIGINS.some((domain) =>
-      requestOrigin.hostname.endsWith(domain.trim()),
-    )
-
-    if (!isAllowed) {
-      console.warn(`Origin not whitelisted: ${requestOrigin.hostname}`)
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Origin not allowed',
-      })
-    }
-
-    next()
-  } catch (error) {
-    console.error(error)
-    console.warn('Invalid origin/referer:', origin)
-    return res.status(403).json({
-      error: 'Forbidden',
-      message: 'Invalid origin or referer',
-    })
-  }
-}
 
 const isValidUrl = (str) => {
   try {
@@ -227,7 +188,7 @@ const runBrowsertimeTest = (targetUrl) => {
   })
 }
 
-app.post('/measure', checkOrigin, async (req, res) => {
+app.post('/measure', async (req, res) => {
   const targetUrl = req.body.url
 
   if (!targetUrl || !isValidUrl(targetUrl)) {
@@ -287,7 +248,7 @@ app.post('/measure', checkOrigin, async (req, res) => {
   })
 })
 
-app.get('/status/:jobId', checkOrigin, (req, res) => {
+app.get('/status/:jobId', (req, res) => {
   const { jobId } = req.params
 
   const job = jobs.get(jobId)
