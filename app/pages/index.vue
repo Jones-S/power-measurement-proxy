@@ -124,10 +124,10 @@ const handleSubmit = async () => {
   isLoading.value = true
 
   try {
-    const port = config.public.browsertimePort
+    // const port = config.public.browsertimePort
+    const powerProxyUrl = config.public.powerProxyUrl
 
-    // 1. Start the measurement job
-    const response = await fetch(`http://localhost:${port}/measure`, {
+    const response = await fetch(`${powerProxyUrl}/measure`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -145,12 +145,10 @@ const handleSubmit = async () => {
     // Update queue position
     queuePosition.value = position
 
-    // 2. Poll for status every 10 seconds
+    // Poll for status every 10 seconds
     const pollInterval = setInterval(async () => {
       try {
-        const statusResponse = await fetch(
-          `http://localhost:${port}/status/${jobId}`,
-        )
+        const statusResponse = await fetch(`${powerProxyUrl}/status/${jobId}`)
 
         if (!statusResponse.ok) {
           throw new Error('Failed to fetch status')

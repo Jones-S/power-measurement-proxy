@@ -32,12 +32,6 @@ https://github.com/sitespeedio/sitespeed.io/issues/4576
 Could be that the drivers need to be installed (which are more laxly handled with npm):
 `$ pnpm rebuild @sitespeed.io/chromedriver @sitespeed.io/geckodriver`
 
-## Cloudflare
+## Install proxy on a new machine
 
-To create CNAME DNS for tunnel
-`$ cloudflared tunnel create [TUNNEL-NAME]`
-
-`$ cloudflared tunnel route dns [TUNNEL-NAME] power-proxy.784516.xyz`
-_2025-12-20T18:48:06Z INF Added CNAME power-proxy.784516.xyz which will route to this tunnel tunnelID=bc1ff0fa-ff75-4afc-a..._
-
-`$ cloudflared tunnel --config ./cloudflared/config.yml run power-proxy`
+[docs/setup.md](setup.md)

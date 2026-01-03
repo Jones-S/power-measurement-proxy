@@ -19,6 +19,9 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       browsertimePort: process.env.NUXT_PUBLIC_BROWSERTIME_PORT || '3001',
+      powerProxyUrl:
+        process.env.NUXT_PUBLIC_POWER_PROXY_URL ||
+        'https://power-proxy.784516.xyz',
     },
   },
   devtools: { enabled: true },
