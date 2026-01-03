@@ -188,7 +188,8 @@ const runBrowsertimeTest = (targetUrl) => {
         const result = {
           requestedUrl: targetUrl,
           pageTitle:
-            fullJson[0]?.pageInfo?.documentTitle || 'Title not available',
+            fullJson[0]?.browserScripts?.pageInfo?.documentTitle ||
+            'Title not available',
           executionTime: `${executionTime}ms`,
           powerConsumption: {
             value: fullJson[0]?.powerConsumption?.[0],

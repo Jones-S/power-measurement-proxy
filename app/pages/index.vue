@@ -66,7 +66,7 @@
           <div class="flex flex-col gap-1">
             <p class="text-sm font-light text-gray-500">Power Consumption</p>
             <p class="text-2xl font-semibold">
-              {{ (results.powerConsumption.value * 1000).toFixed(2)
+              {{ results.powerConsumption.value.toFixed(2)
               }}{{ results.powerConsumption.unit }}
             </p>
           </div>
