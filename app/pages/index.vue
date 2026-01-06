@@ -8,7 +8,7 @@
       <div class="flex flex-col gap-2 font-sans font-light text-black">
         <p class="text-base leading-normal">
           Enter a URL to receive the power usage needed to load and display this
-          page on an M2 Mac Mini.
+          page on a M2 Mac Mini.
         </p>
         <p class="text-xs leading-normal">
           Internally a firefox instance is initiated, opens the given URL, uses
@@ -18,9 +18,8 @@
             class="cursor-pointer underline decoration-solid"
             target="_blank"
             rel="noopener noreferrer"
+            >profiler</a
           >
-            profiler
-          </a>
           to measure the power consumption.
         </p>
       </div>
@@ -66,7 +65,7 @@
           <div class="flex flex-col gap-1">
             <p class="text-sm font-light text-gray-500">Power Consumption</p>
             <p class="text-2xl font-semibold">
-              {{ results.powerConsumption.value.toFixed(2)
+              {{ results.powerConsumption.value.toFixed(6)
               }}{{ results.powerConsumption.unit }}
             </p>
           </div>
