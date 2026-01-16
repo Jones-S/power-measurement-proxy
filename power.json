@@ -1,6 +1,7 @@
 {
   "browser": "firefox",
   "iterations": 1,
+  "viewPort": "1440x900",
   "firefox": {
     "powerConsumption": true,
     "geckoProfiler": true,
