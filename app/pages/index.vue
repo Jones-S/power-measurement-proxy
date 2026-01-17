@@ -63,7 +63,7 @@
 
         <div class="flex flex-col gap-4 font-sans text-black">
           <div class="flex flex-col gap-1">
-            <p class="text-sm font-light text-gray-500">Power Consumption</p>
+            <p class="text-sm font-light text-gray-700">Power Consumption</p>
             <p class="text-2xl font-semibold">
               {{ results.powerConsumption.value.toFixed(6)
               }}{{ results.powerConsumption.unit }}
@@ -71,12 +71,12 @@
           </div>
 
           <div class="flex flex-col gap-1">
-            <p class="text-sm font-light text-gray-500">Execution Time</p>
+            <p class="text-sm font-light text-gray-700">Execution Time</p>
             <p class="text-2xl font-semibold">{{ results.executionTime }}</p>
           </div>
 
           <div class="flex flex-col gap-1">
-            <p class="text-sm font-light text-gray-500">
+            <p class="text-sm font-light text-gray-700">
               First Contentful Paint
             </p>
             <p class="text-2xl font-semibold">
